@@ -7,15 +7,16 @@ import time
 #Window Size
 Width = 500
 Height = 500
-GAMMA = 0.9
+GAMMA = 0.9 #discountfactor
 EPSILON = 0.9
-LearningRate = 0.1
+LearningRate = 0.5#learning rate
 EPISODES=100
-ACTIONS = ["right","left","up","down"]
-Q = pd.DataFrame(np.zeros((25,4)),columns=ACTIONS)
-          
-path = [[1,0,1,1,0],
-		[1,1,1,1,1],
+ACTIONS = ["right","left","up","down"]#possible actions
+Q = pd.DataFrame(np.zeros((25,4)),columns=ACTIONS)#create Q table
+ 
+#Maze to Create. 0->BlackBox 20->Goal          
+path = [[1,1,1,1,1],
+		[1,0,0,1,1],
 		[1,1,0,1,1],
 		[1,0,20,0,1],
 		[1,1,1,1,1]]
@@ -77,6 +78,7 @@ class CircleProperties:
 
 
 #Functions*****************************************************************************************
+#rendering functions
 def DrawCircle(canvas,Circle):
 	return(canvas.Canvas.create_oval(Circle.Position.X-Circle.Radius,Circle.Position.Y-Circle.Radius,\
 	                   Circle.Position.X+Circle.Radius,Circle.Position.Y+Circle.Radius,\
@@ -139,17 +141,21 @@ def DrawPath(canvas,path):
 				canvas.Canvas.create_rectangle(i*100+5,j*100+5,(i*100)+95,(j*100)+95,fill="black")
 	drawLines(canvas,"red")
 	return()
+######################################################################################################
+#Learning related functions
 
+#Choose action for given satte
 def ChooseAction(state):
-	if(Q.iloc[state].all() == 0):
+	if(Q.iloc[state].all() == 0):#if all 0 then choose randomly
 		return(np.random.choice(ACTIONS))
-	return(Q.iloc[state].idxmax())
+	return(Q.iloc[state].idxmax())#else return action with max value
 
+#get feedback from enviornment
 def GetFeedback(path,Circle):
 	x = Circle.Position.Y//100
 	y = Circle.Position.X//100
-	reward = path[x][y]
-	state = x*5 + y
+	reward = path[x][y]#get reward from maze
+	state = x*5 + y#get next state
 	if(reward == 20):
 		reward = 2
 	elif(reward == 0):
@@ -158,7 +164,8 @@ def GetFeedback(path,Circle):
 		reward = 0
 	
 	return(state,reward)
-	 
+
+#Reached Goal?	 
 def ReachedGoal(path,Circle):
 	x = Circle.Position.Y//100
 	y = Circle.Position.X//100
@@ -166,13 +173,15 @@ def ReachedGoal(path,Circle):
 		return(True)
 	return(False)
 
+#Black Box?
 def Punish(Circle):
 	x = Circle.Position.Y//100
 	y = Circle.Position.X//100
 	if(path[x][y] == 0):
 		return(True)
 	return(False)
-	
+
+#Randomly choose state 	
 def ChooseState(path):
 	x = np.random.random_integers(0,4)
 	y = np.random.random_integers(0,4)
@@ -188,35 +197,47 @@ def main():
 	Width = 500
 	Height = 500
 	Canvas = CanvasProperties(root)
-	Canvas.InitCanvas(Width,Height)
+	Canvas.InitCanvas(Width,Height)#Create canvas
 	
 	colors = ["red","black","yellow","cyan","magenta"]
 	
-	DrawPath(Canvas,path)
-	hell = 0
-	while(EPISODES != 0):
+	debug = True
+	Circle = CircleProperties(50,50,25,"red")#set circle properties
+	#State = ChooseState(path)
+	State = 0
+	Steps = 0
+	Circle,Success = Move(Canvas,Circle,"na")#move to init position
+	DrawPath(Canvas,path)#draw maze
+
+	while(EPISODES != 0 and debug is False):
 		Circle = CircleProperties(50,50,25,"red")
 		#State = ChooseState(path)
 		State = 0
-		Circle,Success = Move(Canvas,Circle,"na")
 		Steps = 0
+		Circle,Success = Move(Canvas,Circle,"na")
 		Canvas.Update()
-		while (not ReachedGoal(path,Circle)):
-			Action = ChooseAction(State)
+		while (not ReachedGoal(path,Circle)):#while not at the goal
+			Action = ChooseAction(State)#choose action
 			
 			Circle,Success = Move(Canvas,Circle,Action)
+			
+			#Was move successful?
 			if(Success):
-				NextState, Reward = GetFeedback(path,Circle)
+				NextState, Reward = GetFeedback(path,Circle)#get feedback
 				
 				if(ReachedGoal(path,Circle)):
-					QTarget = Reward
-				else:
+					QTarget = Reward#if reached goal
+				else:#else find qtarget given reward and max value of the next state 
 					QTarget = Reward + GAMMA*Q.iloc[NextState].max()
+				
+				#update the value for the current state and action 
 				Q.iloc[State][Action] += LearningRate*(QTarget - Q.iloc[State][Action])
+				
 				State = NextState
 				Steps += 1
 				Canvas.Update()
-				if(Punish(Circle)):
+				if(Punish(Circle)):#if in blackbox then reset
+					time.sleep(0.01)
 					Circle.Clear(Canvas)
 					Circle = CircleProperties(50,50,25,"red")
 					#State = ChooseState(path)
@@ -225,19 +246,20 @@ def main():
 					Steps = 0
 					hell += 1
 					Canvas.Update()
-					print "in hell ",hell
-			else:
-				Q.iloc[State][Action] = -10
-			time.sleep(0.3)
-		#time.sleep(1)
+			else:#if not then respective action is not possible for the current state
+				Q.iloc[State][Action] = -10#prevent taking this action in future
+			
+			time.sleep(0.001)
+		
 		Circle.Clear(Canvas)
 		EPISODES -= 1
-	print(Q)
-	while(True):
+	while(debug):
 		Action = raw_input()
 		if(ACTIONS == 'q'):
 			break
 		Move(Canvas,Circle,Action)
+	print(Q)
+
 	
 if __name__ == "__main__":
 	main()

@@ -37,7 +37,35 @@ class Bounds:
 		self.UPY = UPY
 		self.LRX = LRX
 		self.LRY = LRY
+
+class QLearning:
+	Qtable = None
+	def __init__(self,LearningRate,GAMMA,EPSILON):
+		self.LearningRate = LearningRate
+		self.GAMMA = GAMMA
+		self.EPSILON = EPSILON
 		
+	def InitQtable(self,Rows,Columns):
+		self.Qtable = pd.DataFrame(Rows,columns=Columns)
+	
+	def ChooseAction(self,State):
+		if(self.Qtable.iloc[State].all() == 0):#if all 0 then choose randomly
+			return(np.random.choice(list(self.Qtable)))
+		return(self.Qtable.iloc[State].idxmax())#else return action with max value
+	
+	def Learn(self,CurrentState,CurrentAction,Reward,NextState,isReachedGoal):
+		if(isReachedGoal):
+			Qtarget = Reward
+		else:
+			Qtarget = Reward + self.GAMMA*self.Qtable.iloc[NextState].max()
+			
+		self.Qtable.iloc[CurrentState][CurrentAction] += self.LearningRate*(Qtarget - self.Qtable.iloc[CurrentState][CurrentAction])
+		
+	def AssignValue(self,State,Action,Value):
+		self.Qtable.iloc[State][Action] = Value
+	
+	def PrintTable(self):
+		print(self.Qtable)
 		
 class CanvasProperties:
 	Canvas = None
@@ -189,6 +217,7 @@ def ChooseState(path):
 		ChooseState(path)
 	return(path[x][y])
 
+
 #Main**********************************************************************************************
 def main():
 	global EPISODES
@@ -201,13 +230,16 @@ def main():
 	
 	colors = ["red","black","yellow","cyan","magenta"]
 	
-	debug = True
+	debug = False
 	Circle = CircleProperties(50,50,25,"red")#set circle properties
 	#State = ChooseState(path)
 	State = 0
 	Steps = 0
-	Circle,Success = Move(Canvas,Circle,"na")#move to init position
 	DrawPath(Canvas,path)#draw maze
+	
+	Qlearner = QLearning(LearningRate,GAMMA,EPSILON)
+	
+	Qlearner.InitQtable(np.zeros((25,4)),ACTIONS)
 
 	while(EPISODES != 0 and debug is False):
 		Circle = CircleProperties(50,50,25,"red")
@@ -217,7 +249,7 @@ def main():
 		Circle,Success = Move(Canvas,Circle,"na")
 		Canvas.Update()
 		while (not ReachedGoal(path,Circle)):#while not at the goal
-			Action = ChooseAction(State)#choose action
+			Action = Qlearner.ChooseAction(State)#choose action
 			
 			Circle,Success = Move(Canvas,Circle,Action)
 			
@@ -225,13 +257,12 @@ def main():
 			if(Success):
 				NextState, Reward = GetFeedback(path,Circle)#get feedback
 				
+				#if reached goal
 				if(ReachedGoal(path,Circle)):
-					QTarget = Reward#if reached goal
-				else:#else find qtarget given reward and max value of the next state 
-					QTarget = Reward + GAMMA*Q.iloc[NextState].max()
-				
-				#update the value for the current state and action 
-				Q.iloc[State][Action] += LearningRate*(QTarget - Q.iloc[State][Action])
+					Qlearner.Learn(State,Action,Reward,NextState,True)
+				#else find qtarget given reward and max value of the next state 	
+				else:
+					Qlearner.Learn(State,Action,Reward,NextState,False)
 				
 				State = NextState
 				Steps += 1
@@ -240,25 +271,25 @@ def main():
 					time.sleep(0.01)
 					Circle.Clear(Canvas)
 					Circle = CircleProperties(50,50,25,"red")
-					#State = ChooseState(path)
 					State = 0
 					Circle,Success = Move(Canvas,Circle,"na")
 					Steps = 0
-					hell += 1
 					Canvas.Update()
 			else:#if not then respective action is not possible for the current state
-				Q.iloc[State][Action] = -10#prevent taking this action in future
+				Qlearner.AssignValue(State,Action,-10)#prevent taking this action in future
 			
 			time.sleep(0.001)
 		
 		Circle.Clear(Canvas)
 		EPISODES -= 1
+	
+	#debug
 	while(debug):
 		Action = raw_input()
 		if(ACTIONS == 'q'):
 			break
 		Move(Canvas,Circle,Action)
-	print(Q)
+	Qlearner.PrintTable()
 
 	
 if __name__ == "__main__":
